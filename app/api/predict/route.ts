@@ -55,7 +55,39 @@ function mockPredict(content: string, title: string) {
   if (emotionalCount >= 3) fakeScore += 0.18
   else if (emotionalCount >= 1) fakeScore += 0.10
 
-  // 5. LACK OF CREDIBLE SOURCES (MEDIUM WEIGHT)
+  // 5. ABSURD/IMPLAUSIBLE CLAIMS (VERY HIGH WEIGHT - HOAX INDICATOR)
+  const absurdClaimsPatterns = [
+    /cat[s]?.*speak.*language/i,
+    /dog[s]?.*talk.*english/i,
+    /animal[s]?.*communicate.*language/i,
+    /implanted.*chip[s]?.*speak/i,
+    /trained.*pet[s]?.*fluent/i,
+    /miracle.*cure[s]?.*all.*disease/i,
+    /secret.*government.*alien/i,
+    /ancient.*secret.*immortality/i,
+    /lost.*technology.*time.*travel/i,
+    /scientist[s]?.*discover.*perpetual.*motion/i,
+    /water.*into.*gold/i,
+    /human[s]?.*grow.*wing[s]?/i,
+    /mind.*control.*technology.*chips/i,
+  ]
+  const absurdClaims = absurdClaimsPatterns.filter(pattern => pattern.test(text)).length
+  if (absurdClaims > 0) fakeScore += 0.40
+
+  // 5b. CHECK IF EXPERTS DISMISSED THE CLAIM (HOAX PATTERN)
+  // Hoaxes often mention experts dismissing them to seem credible
+  const dismissalPatterns = [
+    /experts? (?:dismissed|denied|debunked|refuted)/i,
+    /(?:dismissed|denied|debunked|refuted).*(?:unsupported|false|hoax|fake|fabricated)/i,
+    /(?:unsupported|false|fabricated|hoax).*scientific evidence/i,
+  ]
+  const dismissalFound = dismissalPatterns.filter(pattern => pattern.test(text)).length
+  if (absurdClaims > 0 && dismissalFound > 0) {
+    // This is a classic hoax pattern: absurd claim + experts dismiss it
+    fakeScore += 0.15
+  }
+
+  // 6. LACK OF CREDIBLE SOURCES (MEDIUM WEIGHT)
   const credibleSources = [
     'according to', 'sources say', 'officials stated', 'government report',
     'research shows', 'study found', 'survey reveals', 'investigation found',
@@ -68,7 +100,7 @@ function mockPredict(content: string, title: string) {
   if (sourceCount === 0) fakeScore += 0.15
   else if (sourceCount === 1) fakeScore += 0.05
 
-  // 6. POOR GRAMMAR & SPELLING (LIGHT WEIGHT)
+  // 7. POOR GRAMMAR & SPELLING (LIGHT WEIGHT)
   // Check for common misspellings and poor grammar patterns
   const poorGrammarPatterns = [
     /your (instead of|insted|instd)/g,
@@ -84,7 +116,7 @@ function mockPredict(content: string, title: string) {
   }, 0)
   if (grammarIssues > 2) fakeScore += 0.10
 
-  // 7. REAL NEWS INDICATORS - ONLY SIGNIFICANT REDUCTION
+  // 8. REAL NEWS INDICATORS - ONLY SIGNIFICANT REDUCTION
   // Only significantly reduce if multiple credible sources mentioned together
   const realNewsIndicators = [
     'according to', 'officials', 'government', 'research', 'study',
