@@ -86,9 +86,10 @@ function mockPredict(content: string, title: string) {
     [/viral.*(?:article|report|claim)/i, 'viral_claim'],
     [/posts?.*(?:circulating|spreading|viral).*social media/i, 'social_media_claim'],
     [/(?:an |reportedly ).*article claims/i, 'anonymous_article_claim'],
-    [/researchers.*(?:have proven|proved|discovered)/i, 'vague_researcher_claim'],
-    [/claim[s]? that.*(?:study|research).*proven/i, 'vague_study_claim'],
-    [/according to.*report/i, 'vague_report'],
+    // Only flag vague researcher claims, not legitimate research by teams/institutions
+    [/^researchers.*(?:claim|allegedly|say).*(?:have proven|proved|discovered)/i, 'vague_researcher_claim'],
+    [/claim[s]? that.*(?:unverified|alleged|supposedly).*(?:study|research).*proven/i, 'vague_study_claim'],
+    [/according to (?:an )?unnamed.*(?:source|report|article)/i, 'vague_report'],
   ]
   
   let vagueClaimCount = 0
@@ -139,18 +140,19 @@ function mockPredict(content: string, title: string) {
   // =======================
   const credibleSourceMarkers = [
     'according to', 'officials', 'government', 'announced', 'confirmed',
-    'research', 'study', 'found', 'investigation', 'spokesman', 'statement'
+    'research team', 'study found', 'investigation', 'spokesman', 'statement',
+    'department', 'agency', 'bureau', 'institute', 'university'
   ]
   
   const credibleSourceCount = credibleSourceMarkers.filter(source => text.includes(source)).length
   
   // ONLY reduce if: NO absurd claims AND NO vague social media claims AND MANY credible indicators
-  // Require multiple credible indicators (6+) to confirm real news, lowering fake score significantly
-  if (absurdClaimCount === 0 && vagueClaimCount === 0 && credibleSourceCount >= 6) {
+  // Require multiple credible indicators (5+) to confirm real news, lowering fake score significantly
+  if (absurdClaimCount === 0 && vagueClaimCount === 0 && credibleSourceCount >= 5) {
     fakeScore = Math.max(0.10, fakeScore - 0.50) // Very strong real news signal
     detectedPatterns.push('credible_sources')
-  } else if (absurdClaimCount === 0 && vagueClaimCount === 0 && credibleSourceCount >= 4) {
-    fakeScore = Math.max(0.25, fakeScore - 0.30) // Moderate real news signal
+  } else if (absurdClaimCount === 0 && vagueClaimCount === 0 && credibleSourceCount >= 3) {
+    fakeScore = Math.max(0.20, fakeScore - 0.35) // Moderate real news signal
     detectedPatterns.push('credible_sources')
   }
 
