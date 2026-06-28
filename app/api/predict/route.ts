@@ -19,7 +19,12 @@ function mockPredict(content: string, title: string) {
     const matches = text.match(pattern)
     return count + (matches ? matches.length : 0)
   }, 0)
+  // Add score for excessive punctuation or breaking news format
   if (punctuationCount > 3) fakeScore += 0.25
+  else if (punctuationCount > 1) fakeScore += 0.15
+  
+  // Breaking news format often combined with clickbait
+  if (/breaking.*news/i.test(text) && /shocking|explosive/i.test(text)) fakeScore += 0.18
 
   // 2. ALL CAPS WORDS (HIGH WEIGHT: +0.22)
   const wordArray = text.split(/\s+/).filter(w => w.length > 0)
@@ -38,8 +43,9 @@ function mockPredict(content: string, title: string) {
   ]
   const clickbaitCount = clickbaitKeywords.filter(kw => text.includes(kw)).length
   if (clickbaitCount >= 4) fakeScore += 0.32
+  else if (clickbaitCount >= 3) fakeScore += 0.28
   else if (clickbaitCount >= 2) fakeScore += 0.22
-  else if (clickbaitCount >= 1) fakeScore += 0.12
+  else if (clickbaitCount >= 1) fakeScore += 0.15
 
   // 4. EMOTIONAL MANIPULATION (MEDIUM-HIGH WEIGHT: +0.18)
   const emotionalWords = [
@@ -89,6 +95,11 @@ function mockPredict(content: string, title: string) {
     /mind.*control.*technology.*chips/i,
     /mind.*control.*implant/i,
     /remote.*control.*humans/i,
+    // Ridiculous tax/policy claims
+    /tax.*air/i,
+    /charging.*air/i,
+    /tax.*oxygen/i,
+    /monitor.*oxygen.*consumption/i,
     // Hidden evidence patterns
     /deliberately.*hidden.*public/i,
     /hidden.*deliberately/i,
@@ -116,6 +127,8 @@ function mockPredict(content: string, title: string) {
     /reportedly.*found/i,
     /allegedly/i,
     /online article claims/i,
+    /posts?.*(?:circulating|spreading|viral).*social media/i,
+    /social media.*claim[s]?/i,
     /some say/i,
     /it is said/i,
     /researchers.*have.*discovered.*shocking/i,
@@ -126,7 +139,19 @@ function mockPredict(content: string, title: string) {
   if (vagueCount >= 2) fakeScore += 0.20
   else if (vagueCount >= 1) fakeScore += 0.15
 
-  // 7. LACK OF CREDIBLE SOURCES (MEDIUM WEIGHT: +0.15)
+  // 7. EXPLICIT MISINFORMATION/DEBUNKING MARKERS (MEDIUM WEIGHT: +0.20)
+  // If the article explicitly calls something misinformation/hoax/debunked, it's reporting on false claims
+  const misinformationMarkers = [
+    /identified as misinformation/i,
+    /identified as (?:false|hoax|fake|fabricated)/i,
+    /claim[s]? (?:has|have) been debunked/i,
+    /no (?:government|official|credible).*announced.*such/i,
+    /social media hoax/i,
+    /internet hoax/i,
+  ]
+  const misinformationCount = misinformationMarkers.filter(marker => marker.test(text)).length
+
+  // 8. LACK OF CREDIBLE SOURCES (MEDIUM WEIGHT: +0.15)
   const credibleSources = [
     'according to', 'sources say', 'officials stated', 'government report',
     'research shows', 'study found', 'survey reveals', 'investigation found',
@@ -136,15 +161,22 @@ function mockPredict(content: string, title: string) {
     'associated press', 'ap news', 'named university', 'named researcher'
   ]
   const sourceCount = credibleSources.filter(source => text.includes(source)).length
-  if (sourceCount === 0) fakeScore += 0.15
-  else if (sourceCount === 1) fakeScore += 0.05
+  
+  // When article explicitly says something is misinformation/debunked, treat it as reporting on fake news
+  if (misinformationCount > 0 && vagueCount >= 1) {
+    fakeScore += 0.25 // This is reporting on debunked claims
+  } else if (sourceCount === 0) {
+    fakeScore += 0.15
+  } else if (sourceCount === 1) {
+    fakeScore += 0.05
+  }
 
-  // 7b. COMBINED: VAGUE CLAIMS + NO CREDIBLE SOURCES = STRONG FAKE SIGNAL
-  if (vagueCount >= 2 && sourceCount === 0) {
+  // 8b. COMBINED: VAGUE CLAIMS + NO CREDIBLE SOURCES = STRONG FAKE SIGNAL
+  if (vagueCount >= 2 && sourceCount === 0 && misinformationCount === 0) {
     fakeScore += 0.15 // Additional boost for this dangerous combination
   }
 
-  // 8. POOR GRAMMAR & SPELLING (LIGHT WEIGHT: +0.10)
+  // 9. POOR GRAMMAR & SPELLING (LIGHT WEIGHT: +0.10)
   const poorGrammarPatterns = [
     /your (instead of|insted|instd)/g,
     /their (instead of|insted)/g,
@@ -159,7 +191,7 @@ function mockPredict(content: string, title: string) {
   }, 0)
   if (grammarIssues > 2) fakeScore += 0.10
 
-  // 9. REAL NEWS INDICATORS - CONSERVATIVE REDUCTION
+  // 10. REAL NEWS INDICATORS - CONSERVATIVE REDUCTION
   // Only reduce score if there are STRONG credible signals
   const realNewsIndicators = [
     'according to', 'officials', 'government', 'research', 'study',
@@ -170,10 +202,10 @@ function mockPredict(content: string, title: string) {
   ]
   const realNewsCount = realNewsIndicators.filter(indicator => text.includes(indicator)).length
   
-  // Only reduce if MANY credible indicators AND NO absurd claims
-  if (absurdClaims === 0 && realNewsCount >= 6) {
+  // Only reduce if MANY credible indicators AND NO absurd claims AND NOT reporting on debunked claims
+  if (absurdClaims === 0 && misinformationCount === 0 && realNewsCount >= 6) {
     fakeScore = Math.max(0.10, fakeScore - 0.25)
-  } else if (absurdClaims === 0 && realNewsCount >= 4) {
+  } else if (absurdClaims === 0 && misinformationCount === 0 && realNewsCount >= 4) {
     fakeScore = Math.max(0.15, fakeScore - 0.15)
   }
 
