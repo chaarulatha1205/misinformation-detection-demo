@@ -9,7 +9,7 @@ function mockPredict(content: string, title: string) {
   
   let fakeScore = 0.0
 
-  // 1. SENSATIONALISM DETECTION (HIGH WEIGHT)
+  // 1. SENSATIONALISM DETECTION (HIGH WEIGHT: +0.25)
   const sensationalPatterns = [
     /!!!+/g, // Multiple exclamation marks
     /\?\?\?+/g, // Multiple question marks
@@ -21,13 +21,13 @@ function mockPredict(content: string, title: string) {
   }, 0)
   if (punctuationCount > 3) fakeScore += 0.25
 
-  // 2. ALL CAPS WORDS (HIGH WEIGHT)
+  // 2. ALL CAPS WORDS (HIGH WEIGHT: +0.22)
   const wordArray = text.split(/\s+/).filter(w => w.length > 0)
   const allCapsWords = wordArray.filter(w => /^[A-Z]{2,}$/.test(w))
   const capsRatio = wordArray.length > 0 ? allCapsWords.length / wordArray.length : 0
-  if (capsRatio > 0.10) fakeScore += 0.22 // More than 10% all caps
+  if (capsRatio > 0.10) fakeScore += 0.22
 
-  // 3. CLICKBAIT & SENSATIONALIST KEYWORDS (HIGHEST WEIGHT)
+  // 3. CLICKBAIT & SENSATIONALIST KEYWORDS (HIGHEST WEIGHT: +0.32)
   const clickbaitKeywords = [
     'shocking', 'explosive', 'bombshell', 'unbelievable', 'you wont believe',
     'must watch', 'you won\'t believe', 'doctors hate', 'they don\'t want',
@@ -41,7 +41,7 @@ function mockPredict(content: string, title: string) {
   else if (clickbaitCount >= 2) fakeScore += 0.22
   else if (clickbaitCount >= 1) fakeScore += 0.12
 
-  // 4. EMOTIONAL MANIPULATION (MEDIUM-HIGH WEIGHT)
+  // 4. EMOTIONAL MANIPULATION (MEDIUM-HIGH WEIGHT: +0.18)
   const emotionalWords = [
     'angry', 'furious', 'outraged', 'disgusted', 'appalled', 'heartbroken',
     'devastated', 'horrified', 'sickening', 'evil', 'monster', 'criminal',
@@ -55,26 +55,49 @@ function mockPredict(content: string, title: string) {
   if (emotionalCount >= 3) fakeScore += 0.18
   else if (emotionalCount >= 1) fakeScore += 0.10
 
-  // 5. ABSURD/IMPLAUSIBLE CLAIMS (VERY HIGH WEIGHT - HOAX INDICATOR)
+  // 5. ABSURD/IMPLAUSIBLE CLAIMS (VERY HIGH WEIGHT: +0.45)
+  // Expanded to catch more types of ridiculous claims
   const absurdClaimsPatterns = [
+    // Animal behavior nonsense
     /cat[s]?.*speak.*language/i,
     /dog[s]?.*talk.*english/i,
-    /animal[s]?.*communicate.*language/i,
+    /animal[s]?.*communicate.*fluent/i,
     /implanted.*chip[s]?.*speak/i,
     /trained.*pet[s]?.*fluent/i,
-    /miracle.*cure[s]?.*all.*disease/i,
+    // Substance/composition absurdities
+    /moon.*composed.*cheese/i,
+    /moon.*entirely.*cheese/i,
+    /cheese.*moon/i,
+    // Medical miracles
+    /miracle.*cure/i,
+    /cure[s]?.*(?:all|any).*(?:disease|cancer|illness|condition)/i,
+    /cure.*all.*cancer/i,
+    /immortality.*serum/i,
+    /eliminates.*all.*cancer/i,
+    /100%.*(?:success|cure|recovery)/i,
+    // Conspiracy nonsense
     /secret.*government.*alien/i,
-    /ancient.*secret.*immortality/i,
+    /alien.*government.*technology/i,
+    // Impossible physics
     /lost.*technology.*time.*travel/i,
     /scientist[s]?.*discover.*perpetual.*motion/i,
+    /scientist[s]?.*create.*perpetual/i,
     /water.*into.*gold/i,
     /human[s]?.*grow.*wing[s]?/i,
+    /human[s]?.*develop.*flight/i,
+    // Mind control
     /mind.*control.*technology.*chips/i,
+    /mind.*control.*implant/i,
+    /remote.*control.*humans/i,
+    // Hidden evidence patterns
+    /deliberately.*hidden.*public/i,
+    /hidden.*deliberately/i,
+    /covered.*up.*public/i,
   ]
   const absurdClaims = absurdClaimsPatterns.filter(pattern => pattern.test(text)).length
-  if (absurdClaims > 0) fakeScore += 0.40
+  if (absurdClaims > 0) fakeScore += 0.45
 
-  // 5b. CHECK IF EXPERTS DISMISSED THE CLAIM (HOAX PATTERN)
+  // 5b. CHECK IF EXPERTS DISMISSED THE CLAIM (HOAX PATTERN: +0.15)
   // Hoaxes often mention experts dismissing them to seem credible
   const dismissalPatterns = [
     /experts? (?:dismissed|denied|debunked|refuted)/i,
@@ -83,25 +106,45 @@ function mockPredict(content: string, title: string) {
   ]
   const dismissalFound = dismissalPatterns.filter(pattern => pattern.test(text)).length
   if (absurdClaims > 0 && dismissalFound > 0) {
-    // This is a classic hoax pattern: absurd claim + experts dismiss it
     fakeScore += 0.15
   }
 
-  // 6. LACK OF CREDIBLE SOURCES (MEDIUM WEIGHT)
+  // 6. VAGUE/UNVERIFIABLE CLAIMS (MEDIUM WEIGHT: +0.20)
+  const vaguePatterns = [
+    /claim[s]?.*that.*(?:study|research).*proven/i,
+    /report.*allege[s]?.*that/i,
+    /reportedly.*found/i,
+    /allegedly/i,
+    /online article claims/i,
+    /some say/i,
+    /it is said/i,
+    /researchers.*have.*discovered.*shocking/i,
+    /breakthrough.*contradicts.*(?:everything|all|established)/i,
+    /proof.*that.*contradicts/i,
+  ]
+  const vagueCount = vaguePatterns.filter(pattern => pattern.test(text)).length
+  if (vagueCount >= 2) fakeScore += 0.20
+  else if (vagueCount >= 1) fakeScore += 0.15
+
+  // 7. LACK OF CREDIBLE SOURCES (MEDIUM WEIGHT: +0.15)
   const credibleSources = [
     'according to', 'sources say', 'officials stated', 'government report',
     'research shows', 'study found', 'survey reveals', 'investigation found',
     'experts say', 'spokesman said', 'spokesperson', 'representative',
     'agency', 'organization', 'university', 'doctor', 'professor',
     'announced', 'confirmed', 'verified', 'authentic', 'reuters', 'bbc',
-    'associated press', 'ap news'
+    'associated press', 'ap news', 'named university', 'named researcher'
   ]
   const sourceCount = credibleSources.filter(source => text.includes(source)).length
   if (sourceCount === 0) fakeScore += 0.15
   else if (sourceCount === 1) fakeScore += 0.05
 
-  // 7. POOR GRAMMAR & SPELLING (LIGHT WEIGHT)
-  // Check for common misspellings and poor grammar patterns
+  // 7b. COMBINED: VAGUE CLAIMS + NO CREDIBLE SOURCES = STRONG FAKE SIGNAL
+  if (vagueCount >= 2 && sourceCount === 0) {
+    fakeScore += 0.15 // Additional boost for this dangerous combination
+  }
+
+  // 8. POOR GRAMMAR & SPELLING (LIGHT WEIGHT: +0.10)
   const poorGrammarPatterns = [
     /your (instead of|insted|instd)/g,
     /their (instead of|insted)/g,
@@ -116,8 +159,8 @@ function mockPredict(content: string, title: string) {
   }, 0)
   if (grammarIssues > 2) fakeScore += 0.10
 
-  // 8. REAL NEWS INDICATORS - ONLY SIGNIFICANT REDUCTION
-  // Only significantly reduce if multiple credible sources mentioned together
+  // 9. REAL NEWS INDICATORS - CONSERVATIVE REDUCTION
+  // Only reduce score if there are STRONG credible signals
   const realNewsIndicators = [
     'according to', 'officials', 'government', 'research', 'study',
     'survey', 'investigation', 'expert', 'spokesman', 'representative',
@@ -126,11 +169,15 @@ function mockPredict(content: string, title: string) {
     'announced', 'released', 'published', 'journal', 'institute'
   ]
   const realNewsCount = realNewsIndicators.filter(indicator => text.includes(indicator)).length
-  // Only reduce if there are MULTIPLE credible indicators AND few fake signals
-  if (realNewsCount >= 5 && fakeScore < 0.35) fakeScore = Math.max(0.05, fakeScore - 0.20)
-  else if (realNewsCount >= 3 && fakeScore < 0.25) fakeScore = Math.max(0.10, fakeScore - 0.10)
+  
+  // Only reduce if MANY credible indicators AND NO absurd claims
+  if (absurdClaims === 0 && realNewsCount >= 6) {
+    fakeScore = Math.max(0.10, fakeScore - 0.25)
+  } else if (absurdClaims === 0 && realNewsCount >= 4) {
+    fakeScore = Math.max(0.15, fakeScore - 0.15)
+  }
 
-  // Ensure score is between 0 and 1
+  // Ensure score is between 0.05 and 0.95
   fakeScore = Math.max(0.05, Math.min(0.95, fakeScore))
 
   // Add minimal randomness for variety but keep predictions consistent
@@ -166,10 +213,12 @@ function mockPredict(content: string, title: string) {
 
   // Generate SHAP-like explanations based on detected patterns
   const tokenImportance = []
+  if (absurdClaims > 0) tokenImportance.push({ token: 'absurd/implausible claims', importance: 0.30 })
   if (punctuationCount > 0) tokenImportance.push({ token: 'excessive punctuation', importance: 0.18 })
   if (allCapsWords.length > 0) tokenImportance.push({ token: 'ALL CAPS words', importance: 0.15 })
   if (clickbaitCount > 0) tokenImportance.push({ token: 'sensationalist words', importance: 0.20 })
   if (emotionalCount > 0) tokenImportance.push({ token: 'emotional language', importance: 0.12 })
+  if (vagueCount > 0) tokenImportance.push({ token: 'vague claims', importance: 0.14 })
   if (tokenImportance.length === 0) tokenImportance.push({ token: 'neutral tone', importance: 0.25 })
 
   return {
