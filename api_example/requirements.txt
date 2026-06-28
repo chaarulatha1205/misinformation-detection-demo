@@ -1,0 +1,24 @@
+# Python Backend Requirements for Misinformation Detector
+
+# Web Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# Deep Learning & NLP
+torch==2.0.1
+transformers==4.34.0
+numpy==1.24.3
+
+# Sentiment Analysis
+vaderSentiment==3.3.2
+
+# Explainability
+shap==0.42.3
+
+# Optional: For production deployment
+gunicorn==21.2.0
+python-dotenv==1.0.0
+
+# Optional: For async support
+httpx==0.25.1
+aiofiles==23.2.1

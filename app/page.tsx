@@ -1,23 +1,95 @@
-export default function Page() {
+'use client'
+
+import { useState } from 'react'
+import Header from '@/components/header'
+import ArticleForm from '@/components/article-form'
+import PredictionResult from '@/components/prediction-result'
+import LoadingSpinner from '@/components/loading-spinner'
+import ExplanationPanel from '@/components/explanation-panel'
+
+export default function Home() {
+  const [prediction, setPrediction] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [showExplanation, setShowExplanation] = useState(false)
+
+  const handleSubmit = async (content: string, title: string) => {
+    setLoading(true)
+    setError('')
+    setPrediction(null)
+    setShowExplanation(false)
+
+    try {
+      const response = await fetch('/api/predict', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ content, title }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Prediction failed')
+      }
+
+      const data = await response.json()
+      setPrediction(data)
+      setShowExplanation(true)
+    } catch (err) {
+      setError('Failed to analyze the article. Please try again.')
+      console.error('Prediction error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
-    <main className="relative flex min-h-screen items-center justify-center bg-[color:light-dark(#fff,#000)] text-[color:light-dark(#000,#fff)]">
-      <svg
-        aria-hidden="true"
-        className="size-20"
-        fill="none"
-        viewBox="0 0 20 20"
-        xmlns="http://www.w3.org/2000/svg"
-        stroke="currentColor"
-        strokeWidth="0.5"
-      >
-        <path
-          d="M14.2 14.2H17V6.9375C17 4.76288 15.2371 3 13.0625 3H5.8V5.8M14.2 14.2V7.79063L7.79062 14.2H14.2ZM14.2 14.2V17H6.9375C4.76288 17 3 15.2371 3 13.0625V5.8H5.8M5.8 5.8V12.2313L12.2313 5.8H5.8Z"
-          strokeLinejoin="round"
-        />
-      </svg>
-      <p className="absolute left-1/2 top-[calc(50%+56px)] -translate-x-1/2 whitespace-nowrap text-sm font-medium text-muted-foreground">
-        Your v0 generation will show here.
-      </p>
+    <main className="min-h-screen bg-gradient-to-br from-background via-background to-card">
+      <Header />
+      
+      <div className="container mx-auto px-4 py-12">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Input Section */}
+            <div className="lg:col-span-1">
+              <ArticleForm onSubmit={handleSubmit} isLoading={loading} />
+            </div>
+
+            {/* Results Section */}
+            <div className="lg:col-span-2">
+              {loading && <LoadingSpinner />}
+              
+              {error && (
+                <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-6 text-foreground">
+                  <p className="font-semibold mb-2">Error</p>
+                  <p className="text-sm">{error}</p>
+                </div>
+              )}
+
+              {prediction && !loading && (
+                <>
+                  <PredictionResult prediction={prediction} />
+                  
+                  {showExplanation && (
+                    <div className="mt-6">
+                      <ExplanationPanel prediction={prediction} />
+                    </div>
+                  )}
+                </>
+              )}
+
+              {!loading && !error && !prediction && (
+                <div className="bg-card border border-border/50 rounded-lg p-12 text-center">
+                  <div className="text-muted-foreground">
+                    <p className="text-lg font-medium mb-2">Submit an article to analyze</p>
+                    <p className="text-sm">Enter news content on the left to detect if it&apos;s fake or real</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
     </main>
   )
 }
