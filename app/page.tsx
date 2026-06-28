@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Header from '@/components/header'
 import ArticleForm from '@/components/article-form'
 import PredictionResult from '@/components/prediction-result'
@@ -12,6 +12,11 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showExplanation, setShowExplanation] = useState(false)
+  const [isReady, setIsReady] = useState(false)
+
+  useEffect(() => {
+    setIsReady(true)
+  }, [])
 
   const handleSubmit = async (content: string, title: string) => {
     setLoading(true)
@@ -41,6 +46,10 @@ export default function Home() {
     } finally {
       setLoading(false)
     }
+  }
+
+  if (!isReady) {
+    return null
   }
 
   return (
