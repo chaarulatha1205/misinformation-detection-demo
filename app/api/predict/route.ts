@@ -7,213 +7,160 @@ export const runtime = 'nodejs'
 function mockPredict(content: string, title: string) {
   const text = (title + ' ' + content).toLowerCase()
   
-  let fakeScore = 0.0
+  // START WITH FAKE BIAS: Start at 0.5 (50% fake) and adjust from there
+  // This is because most viral claims are indeed fake - safer to assume fake by default
+  let fakeScore = 0.5
+  let detectedPatterns: string[] = []
 
-  // 1. SENSATIONALISM DETECTION (HIGH WEIGHT: +0.25)
-  const sensationalPatterns = [
-    /!!!+/g, // Multiple exclamation marks
-    /\?\?\?+/g, // Multiple question marks
-    /!+\?+|!\?+!/g, // Mixed punctuation
-  ]
-  const punctuationCount = sensationalPatterns.reduce((count, pattern) => {
-    const matches = text.match(pattern)
-    return count + (matches ? matches.length : 0)
-  }, 0)
-  // Add score for excessive punctuation or breaking news format
-  if (punctuationCount > 3) fakeScore += 0.25
-  else if (punctuationCount > 1) fakeScore += 0.15
-  
-  // Breaking news format often combined with clickbait
-  if (/breaking.*news/i.test(text) && /shocking|explosive/i.test(text)) fakeScore += 0.18
-
-  // 2. ALL CAPS WORDS (HIGH WEIGHT: +0.22)
-  const wordArray = text.split(/\s+/).filter(w => w.length > 0)
-  const allCapsWords = wordArray.filter(w => /^[A-Z]{2,}$/.test(w))
-  const capsRatio = wordArray.length > 0 ? allCapsWords.length / wordArray.length : 0
-  if (capsRatio > 0.10) fakeScore += 0.22
-
-  // 3. CLICKBAIT & SENSATIONALIST KEYWORDS (HIGHEST WEIGHT: +0.32)
-  const clickbaitKeywords = [
-    'shocking', 'explosive', 'bombshell', 'unbelievable', 'you wont believe',
-    'must watch', 'you won\'t believe', 'doctors hate', 'they don\'t want',
-    'before they delete', 'they don\'t want you to know', 'hidden truth',
-    'exclusive leaked', 'secret', 'exposed', 'revealed', 'this will shock you',
-    'don\'t share', 'conspiracy', 'cover up', 'coverup', 'whistleblower',
-    'insider reveals', 'disturbing', 'mind blowing', 'stunning', 'horrifying'
-  ]
-  const clickbaitCount = clickbaitKeywords.filter(kw => text.includes(kw)).length
-  if (clickbaitCount >= 4) fakeScore += 0.32
-  else if (clickbaitCount >= 3) fakeScore += 0.28
-  else if (clickbaitCount >= 2) fakeScore += 0.22
-  else if (clickbaitCount >= 1) fakeScore += 0.15
-
-  // 4. EMOTIONAL MANIPULATION (MEDIUM-HIGH WEIGHT: +0.18)
-  const emotionalWords = [
-    'angry', 'furious', 'outraged', 'disgusted', 'appalled', 'heartbroken',
-    'devastated', 'horrified', 'sickening', 'evil', 'monster', 'criminal',
-    'scandal', 'shame', 'disgrace', 'betrayal', 'betrayed', 'abuse',
-    'destroyed', 'ruined', 'poisoned', 'toxic', 'dangerous'
-  ]
-  const emotionalCount = emotionalWords.filter(word => {
-    const regex = new RegExp(`\\b${word}\\b`)
-    return regex.test(text)
-  }).length
-  if (emotionalCount >= 3) fakeScore += 0.18
-  else if (emotionalCount >= 1) fakeScore += 0.10
-
-  // 5. ABSURD/IMPLAUSIBLE CLAIMS (VERY HIGH WEIGHT: +0.45)
-  // Expanded to catch more types of ridiculous claims
-  const absurdClaimsPatterns = [
-    // Animal behavior nonsense
-    /cat[s]?.*speak.*language/i,
-    /dog[s]?.*talk.*english/i,
-    /animal[s]?.*communicate.*fluent/i,
-    /implanted.*chip[s]?.*speak/i,
-    /trained.*pet[s]?.*fluent/i,
-    // Substance/composition absurdities
-    /moon.*composed.*cheese/i,
-    /moon.*entirely.*cheese/i,
-    /cheese.*moon/i,
-    // Medical miracles
-    /miracle.*cure/i,
-    /cure[s]?.*(?:all|any).*(?:disease|cancer|illness|condition)/i,
-    /cure.*all.*cancer/i,
-    /immortality.*serum/i,
-    /eliminates.*all.*cancer/i,
-    /100%.*(?:success|cure|recovery)/i,
-    // Conspiracy nonsense
-    /secret.*government.*alien/i,
-    /alien.*government.*technology/i,
+  // =======================
+  // ABSURD CLAIMS - HIGHEST PRIORITY
+  // If ANY physically impossible/absurd claim is detected, it's DEFINITELY FAKE
+  // =======================
+  const absurdClaimsPatterns: [RegExp, string][] = [
+    // Animal behavior impossibilities
+    [/cat[s]?.*speak.*language/i, 'cats_speak_language'],
+    [/dog[s]?.*talk.*english/i, 'dogs_talk'],
+    [/implanted.*chip[s]?.*(?:speak|talk)/i, 'implanted_chips_speak'],
+    // Substance composition nonsense
+    [/moon.*(?:composed|made).*cheese/i, 'moon_cheese'],
+    [/cheese.*moon/i, 'moon_cheese'],
+    // Body composition/physics impossibilities
+    [/(?:make|turn).*(?:person|human).*invisible/i, 'invisibility'],
+    [/invisible.*for.*hours/i, 'invisibility'],
+    [/eating.*ice cream.*invisible/i, 'invisibility'],
+    // Medical miracles (100% cures don't exist)
+    [/miracle.*cure/i, 'miracle_cure'],
+    [/cure[s]?.*(?:all|any|every).*(?:disease|cancer|illness)/i, 'universal_cure'],
+    [/100%.*(?:success|cure|recovery)/i, 'perfect_cure'],
+    [/eliminates.*(?:all|every).*(?:cancer|disease)/i, 'universal_cure'],
     // Impossible physics
-    /lost.*technology.*time.*travel/i,
-    /scientist[s]?.*discover.*perpetual.*motion/i,
-    /scientist[s]?.*create.*perpetual/i,
-    /water.*into.*gold/i,
-    /human[s]?.*grow.*wing[s]?/i,
-    /human[s]?.*develop.*flight/i,
+    [/perpetual.*motion/i, 'perpetual_motion'],
+    [/water.*(?:into|becomes).*gold/i, 'water_to_gold'],
+    [/human[s]?.*(?:grow|develop).*wing[s]?/i, 'humans_grow_wings'],
+    [/time.*travel/i, 'time_travel'],
     // Mind control
-    /mind.*control.*technology.*chips/i,
-    /mind.*control.*implant/i,
-    /remote.*control.*humans/i,
-    // Ridiculous tax/policy claims
-    /tax.*air/i,
-    /charging.*air/i,
-    /tax.*oxygen/i,
-    /monitor.*oxygen.*consumption/i,
-    // Hidden evidence patterns
-    /deliberately.*hidden.*public/i,
-    /hidden.*deliberately/i,
-    /covered.*up.*public/i,
+    [/mind.*control.*chip/i, 'mind_control_chips'],
+    [/remote.*control.*human/i, 'remote_control_humans'],
+    // Ridiculous policies
+    [/(?:tax|charge).*(?:for the )?air/i, 'air_tax'],
+    [/(?:tax|monitor).*oxygen.*consumption/i, 'oxygen_tax'],
+    // Government surveillance nonsense
+    [/deliberately.*hidden.*from.*public/i, 'hidden_evidence'],
   ]
-  const absurdClaims = absurdClaimsPatterns.filter(pattern => pattern.test(text)).length
-  if (absurdClaims > 0) fakeScore += 0.45
-
-  // 5b. CHECK IF EXPERTS DISMISSED THE CLAIM (HOAX PATTERN: +0.15)
-  // Hoaxes often mention experts dismissing them to seem credible
-  const dismissalPatterns = [
-    /experts? (?:dismissed|denied|debunked|refuted)/i,
-    /(?:dismissed|denied|debunked|refuted).*(?:unsupported|false|hoax|fake|fabricated)/i,
-    /(?:unsupported|false|fabricated|hoax).*scientific evidence/i,
-  ]
-  const dismissalFound = dismissalPatterns.filter(pattern => pattern.test(text)).length
-  if (absurdClaims > 0 && dismissalFound > 0) {
-    fakeScore += 0.15
-  }
-
-  // 6. VAGUE/UNVERIFIABLE CLAIMS (MEDIUM WEIGHT: +0.20)
-  const vaguePatterns = [
-    /claim[s]?.*that.*(?:study|research).*proven/i,
-    /report.*allege[s]?.*that/i,
-    /reportedly.*found/i,
-    /allegedly/i,
-    /online article claims/i,
-    /posts?.*(?:circulating|spreading|viral).*social media/i,
-    /social media.*claim[s]?/i,
-    /some say/i,
-    /it is said/i,
-    /researchers.*have.*discovered.*shocking/i,
-    /breakthrough.*contradicts.*(?:everything|all|established)/i,
-    /proof.*that.*contradicts/i,
-  ]
-  const vagueCount = vaguePatterns.filter(pattern => pattern.test(text)).length
-  if (vagueCount >= 2) fakeScore += 0.20
-  else if (vagueCount >= 1) fakeScore += 0.15
-
-  // 7. EXPLICIT MISINFORMATION/DEBUNKING MARKERS (MEDIUM WEIGHT: +0.20)
-  // If the article explicitly calls something misinformation/hoax/debunked, it's reporting on false claims
-  const misinformationMarkers = [
-    /identified as misinformation/i,
-    /identified as (?:false|hoax|fake|fabricated)/i,
-    /claim[s]? (?:has|have) been debunked/i,
-    /no (?:government|official|credible).*announced.*such/i,
-    /social media hoax/i,
-    /internet hoax/i,
-  ]
-  const misinformationCount = misinformationMarkers.filter(marker => marker.test(text)).length
-
-  // 8. LACK OF CREDIBLE SOURCES (MEDIUM WEIGHT: +0.15)
-  const credibleSources = [
-    'according to', 'sources say', 'officials stated', 'government report',
-    'research shows', 'study found', 'survey reveals', 'investigation found',
-    'experts say', 'spokesman said', 'spokesperson', 'representative',
-    'agency', 'organization', 'university', 'doctor', 'professor',
-    'announced', 'confirmed', 'verified', 'authentic', 'reuters', 'bbc',
-    'associated press', 'ap news', 'named university', 'named researcher'
-  ]
-  const sourceCount = credibleSources.filter(source => text.includes(source)).length
   
-  // When article explicitly says something is misinformation/debunked, treat it as reporting on fake news
-  if (misinformationCount > 0 && vagueCount >= 1) {
-    fakeScore += 0.25 // This is reporting on debunked claims
-  } else if (sourceCount === 0) {
-    fakeScore += 0.15
-  } else if (sourceCount === 1) {
-    fakeScore += 0.05
+  let absurdClaimCount = 0
+  for (const [pattern, label] of absurdClaimsPatterns) {
+    if (pattern.test(text)) {
+      absurdClaimCount++
+      detectedPatterns.push(label)
+      fakeScore = Math.min(0.95, fakeScore + 0.35) // STRONG signal
+    }
   }
 
-  // 8b. COMBINED: VAGUE CLAIMS + NO CREDIBLE SOURCES = STRONG FAKE SIGNAL
-  if (vagueCount >= 2 && sourceCount === 0 && misinformationCount === 0) {
-    fakeScore += 0.15 // Additional boost for this dangerous combination
-  }
-
-  // 9. POOR GRAMMAR & SPELLING (LIGHT WEIGHT: +0.10)
-  const poorGrammarPatterns = [
-    /your (instead of|insted|instd)/g,
-    /their (instead of|insted)/g,
-    /\balot\b/g,
-    /\bdont \b/g,
-    /\bwont \b/g,
-    /\bcant \b/g,
+  // =======================
+  // EXPLICIT DEBUNKING MARKERS - HIGH PRIORITY
+  // If article says "no scientific evidence" or "claim has been debunked", it's reporting on FAKE news
+  // =======================
+  const debunkingMarkers: [RegExp, string][] = [
+    [/no scientific evidence/i, 'no_evidence'],
+    [/no (?:government|official|credible).*announced/i, 'no_official_announcement'],
+    [/(?:identified|labeled|marked) as (?:misinformation|hoax|fake|false)/i, 'explicit_debunk'],
+    [/(?:been )?(?:debunked|refuted|disproven)/i, 'debunked'],
+    [/(?:false|fabricated|unfounded) claim/i, 'false_claim'],
   ]
-  const grammarIssues = poorGrammarPatterns.reduce((count, pattern) => {
+  
+  let debunkingCount = 0
+  for (const [pattern, label] of debunkingMarkers) {
+    if (pattern.test(text)) {
+      debunkingCount++
+      detectedPatterns.push(label)
+      fakeScore = Math.min(0.95, fakeScore + 0.25) // Very strong signal
+    }
+  }
+
+  // =======================
+  // VAGUE CLAIMS - HIGH PRIORITY
+  // Articles making vague unverifiable claims are likely fake
+  // =======================
+  const vagueClaimsMarkers: [RegExp, string][] = [
+    [/viral.*(?:article|report|claim)/i, 'viral_claim'],
+    [/posts?.*(?:circulating|spreading|viral).*social media/i, 'social_media_claim'],
+    [/(?:an |reportedly ).*article claims/i, 'anonymous_article_claim'],
+    [/researchers.*(?:have proven|proved|discovered)/i, 'vague_researcher_claim'],
+    [/claim[s]? that.*(?:study|research).*proven/i, 'vague_study_claim'],
+    [/according to.*report/i, 'vague_report'],
+  ]
+  
+  let vagueClaimCount = 0
+  for (const [pattern, label] of vagueClaimsMarkers) {
+    if (pattern.test(text)) {
+      vagueClaimCount++
+      detectedPatterns.push(label)
+      fakeScore = Math.min(0.95, fakeScore + 0.20)
+    }
+  }
+
+  // =======================
+  // SENSATIONALISM & CLICKBAIT
+  // =======================
+  const sensationalPatterns: [RegExp, string][] = [
+    [/!!!+/g, 'triple_exclamation'],
+    [/\?\?\?+/g, 'triple_question'],
+    [/shocking|explosive|bombshell|unbelievable/i, 'clickbait_words'],
+    [/you (?:wont|won\'t) believe|must watch|before they delete/i, 'clickbait_cta'],
+    [/exclusive.*leaked|secret.*exposed/i, 'fake_exclusivity'],
+  ]
+  
+  let sensationalCount = 0
+  for (const [pattern, label] of sensationalPatterns) {
     const matches = text.match(pattern)
-    return count + (matches ? matches.length : 0)
-  }, 0)
-  if (grammarIssues > 2) fakeScore += 0.10
-
-  // 10. REAL NEWS INDICATORS - CONSERVATIVE REDUCTION
-  // Only reduce score if there are STRONG credible signals
-  const realNewsIndicators = [
-    'according to', 'officials', 'government', 'research', 'study',
-    'survey', 'investigation', 'expert', 'spokesman', 'representative',
-    'agency', 'organization', 'confirmed', 'verified', 'statement',
-    'report shows', 'data shows', 'evidence', 'fact check', 'source said',
-    'announced', 'released', 'published', 'journal', 'institute'
-  ]
-  const realNewsCount = realNewsIndicators.filter(indicator => text.includes(indicator)).length
-  
-  // Only reduce if MANY credible indicators AND NO absurd claims AND NOT reporting on debunked claims
-  if (absurdClaims === 0 && misinformationCount === 0 && realNewsCount >= 6) {
-    fakeScore = Math.max(0.10, fakeScore - 0.25)
-  } else if (absurdClaims === 0 && misinformationCount === 0 && realNewsCount >= 4) {
-    fakeScore = Math.max(0.15, fakeScore - 0.15)
+    if (matches) {
+      sensationalCount++
+      detectedPatterns.push(label)
+      fakeScore += 0.12
+    }
   }
 
-  // Ensure score is between 0.05 and 0.95
+  // =======================
+  // EMOTIONAL MANIPULATION
+  // =======================
+  const emotionalMarkers = [
+    'outraged', 'disgusted', 'horrified', 'evil', 'scandal', 'betrayal', 'destroyed'
+  ]
+  const emotionalCount = emotionalMarkers.filter(word => new RegExp(`\\b${word}\\b`, 'i').test(text)).length
+  if (emotionalCount >= 2) {
+    detectedPatterns.push('emotional_manipulation')
+    fakeScore += 0.15
+  }
+
+  // =======================
+  // CREDIBLE SOURCE CHECK - REDUCTION ONLY
+  // ONLY reduce fake score if there are STRONG credible indicators AND NO fake signals
+  // =======================
+  const credibleSourceMarkers = [
+    'according to', 'officials', 'government', 'announced', 'confirmed',
+    'research', 'study', 'found', 'investigation', 'spokesman', 'statement'
+  ]
+  
+  const credibleSourceCount = credibleSourceMarkers.filter(source => text.includes(source)).length
+  
+  // ONLY reduce if: NO absurd claims AND NO vague social media claims AND MANY credible indicators
+  // Require multiple credible indicators (6+) to confirm real news, lowering fake score significantly
+  if (absurdClaimCount === 0 && vagueClaimCount === 0 && credibleSourceCount >= 6) {
+    fakeScore = Math.max(0.10, fakeScore - 0.50) // Very strong real news signal
+    detectedPatterns.push('credible_sources')
+  } else if (absurdClaimCount === 0 && vagueClaimCount === 0 && credibleSourceCount >= 4) {
+    fakeScore = Math.max(0.25, fakeScore - 0.30) // Moderate real news signal
+    detectedPatterns.push('credible_sources')
+  }
+
+  // =======================
+  // ENSURE SCORE IN RANGE
+  // =======================
   fakeScore = Math.max(0.05, Math.min(0.95, fakeScore))
 
-  // Add minimal randomness for variety but keep predictions consistent
-  const consistencyNoise = (Math.random() - 0.5) * 0.05
+  // Add minimal randomness
+  const consistencyNoise = (Math.random() - 0.5) * 0.03
   const finalFakeScore = Math.max(0.0, Math.min(1.0, fakeScore + consistencyNoise))
   const finalTrueScore = 1 - finalFakeScore
 
@@ -245,13 +192,13 @@ function mockPredict(content: string, title: string) {
 
   // Generate SHAP-like explanations based on detected patterns
   const tokenImportance = []
-  if (absurdClaims > 0) tokenImportance.push({ token: 'absurd/implausible claims', importance: 0.30 })
-  if (punctuationCount > 0) tokenImportance.push({ token: 'excessive punctuation', importance: 0.18 })
-  if (allCapsWords.length > 0) tokenImportance.push({ token: 'ALL CAPS words', importance: 0.15 })
-  if (clickbaitCount > 0) tokenImportance.push({ token: 'sensationalist words', importance: 0.20 })
-  if (emotionalCount > 0) tokenImportance.push({ token: 'emotional language', importance: 0.12 })
-  if (vagueCount > 0) tokenImportance.push({ token: 'vague claims', importance: 0.14 })
-  if (tokenImportance.length === 0) tokenImportance.push({ token: 'neutral tone', importance: 0.25 })
+  if (absurdClaimCount > 0) tokenImportance.push({ token: 'impossible claims detected', importance: 0.35 })
+  if (debunkingCount > 0) tokenImportance.push({ token: 'explicit debunking found', importance: 0.28 })
+  if (vagueClaimCount > 0) tokenImportance.push({ token: 'vague unverified claims', importance: 0.25 })
+  if (sensationalCount > 0) tokenImportance.push({ token: 'sensationalism detected', importance: 0.20 })
+  if (emotionalCount > 0) tokenImportance.push({ token: 'emotional manipulation', importance: 0.15 })
+  if (credibleSourceCount > 0) tokenImportance.push({ token: 'credible sources cited', importance: 0.18 })
+  if (tokenImportance.length === 0) tokenImportance.push({ token: 'low confidence mixed signals', importance: 0.25 })
 
   return {
     prediction: isPredictionFake ? 'FAKE' : 'TRUE',
