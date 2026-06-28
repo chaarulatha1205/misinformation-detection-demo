@@ -11,7 +11,7 @@ export default function Header() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-foreground">Misinformation Detector</h1>
-              <p className="text-sm text-muted-foreground">Explainable AI powered by DistilBERT</p>
+              <p className="text-sm text-muted-foreground">By CHAARULATHA J (22MID0317)</p>
             </div>
           </div>
           
